@@ -11,7 +11,10 @@
 //===----------------------------------------------------------------------===//
 
 #include "primer/trie.h"
+#include <map>
+#include <memory>
 #include <string_view>
+#include <utility>
 #include "common/exception.h"
 
 namespace bustub {
@@ -24,12 +27,28 @@ namespace bustub {
  */
 template <class T>
 auto Trie::Get(std::string_view key) const -> const T * {
-  throw NotImplementedException("Trie::Get is not implemented.");
+  //throw NotImplementedException("Trie::Get is not implemented.");
 
   // You should walk through the trie to find the node corresponding to the key. If the node doesn't exist, return
   // nullptr. After you find the node, you should use `dynamic_cast` to cast it to `const TrieNodeWithValue<T> *`. If
   // dynamic_cast returns `nullptr`, it means the type of the value is mismatched, and you should return nullptr.
   // Otherwise, return the value.
+  auto currentNode = this->root_;
+  for(char ch: key){
+    if(currentNode == nullptr) {
+      return nullptr;
+    }
+    auto findnode = currentNode->children_.find(ch);
+    if(findnode == currentNode->children_.end()){
+      return nullptr;
+    }else {
+      currentNode = findnode->second;
+    }
+  }
+  auto *value_node = dynamic_cast<const TrieNodeWithValue<T> *>(currentNode.get());
+  if (value_node == nullptr) return nullptr;
+
+  return value_node->value_.get();
 }
 
 /**
@@ -39,8 +58,38 @@ auto Trie::Get(std::string_view key) const -> const T * {
 template <class T>
 auto Trie::Put(std::string_view key, T value) const -> Trie {
   // Note that `T` might be a non-copyable type. Always use `std::move` when creating `shared_ptr` on that value.
-  throw NotImplementedException("Trie::Put is not implemented.");
+  auto currentNode = this->root_;
+  std::vector<std::pair<char, std::shared_ptr<const TrieNode>>> parents;
+  for(char ch: key){
+    parents.push_back(std::make_pair(ch, currentNode));
+    if(currentNode == nullptr) {
+      continue;
+    }
+    auto findnode = currentNode->children_.find(ch);
+    if(findnode == currentNode->children_.end()){
+      currentNode = nullptr;
+    }else {
+      currentNode = findnode->second;
+    }
+  }
+  if(currentNode == nullptr) {
+    currentNode = std::make_shared<TrieNodeWithValue<T>>(std::make_shared<T>(std::move(value)));
+  }else{
+    currentNode = std::make_shared<TrieNodeWithValue<T>>(currentNode->children_,std::make_shared<T>(std::move(value)));
+  }
+  while(!parents.empty()) {
+    auto [key, node] = parents.back();
+    parents.pop_back();
+    std::shared_ptr<TrieNode> cloned_node;
+    if(node != nullptr)
+      cloned_node = node->Clone();
+    else
+      cloned_node = std::make_shared<TrieNode>(std::map<char, std::shared_ptr<const TrieNode>>{});
+    cloned_node->children_[key] = currentNode;
+    currentNode = std::move(cloned_node);
+  }
 
+  return Trie{currentNode->Clone()};
   // You should walk through the trie and create new nodes if necessary. If the node corresponding to the key already
   // exists, you should create a new `TrieNodeWithValue`.
 }
