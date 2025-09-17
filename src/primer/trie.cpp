@@ -27,23 +27,22 @@ namespace bustub {
  */
 template <class T>
 auto Trie::Get(std::string_view key) const -> const T * {
-  //throw NotImplementedException("Trie::Get is not implemented.");
+  // throw NotImplementedException("Trie::Get is not implemented.");
 
   // You should walk through the trie to find the node corresponding to the key. If the node doesn't exist, return
   // nullptr. After you find the node, you should use `dynamic_cast` to cast it to `const TrieNodeWithValue<T> *`. If
   // dynamic_cast returns `nullptr`, it means the type of the value is mismatched, and you should return nullptr.
   // Otherwise, return the value.
   auto currentNode = this->root_;
-  for(char ch: key){
-    if(currentNode == nullptr) {
+  for (char ch : key) {
+    if (currentNode == nullptr) {
       return nullptr;
     }
     auto findnode = currentNode->children_.find(ch);
-    if(findnode == currentNode->children_.end()){
+    if (findnode == currentNode->children_.end())
       return nullptr;
-    }else {
+    else
       currentNode = findnode->second;
-    }
   }
   auto *value_node = dynamic_cast<const TrieNodeWithValue<T> *>(currentNode.get());
   if (value_node == nullptr) return nullptr;
@@ -60,28 +59,28 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
   // Note that `T` might be a non-copyable type. Always use `std::move` when creating `shared_ptr` on that value.
   auto currentNode = this->root_;
   std::vector<std::pair<char, std::shared_ptr<const TrieNode>>> parents;
-  for(char ch: key){
+  for (char ch : key) {
     parents.push_back(std::make_pair(ch, currentNode));
-    if(currentNode == nullptr) {
+    if (currentNode == nullptr) {
       continue;
     }
     auto findnode = currentNode->children_.find(ch);
-    if(findnode == currentNode->children_.end()){
+    if (findnode == currentNode->children_.end())
       currentNode = nullptr;
-    }else {
+    else
       currentNode = findnode->second;
-    }
   }
-  if(currentNode == nullptr) {
+
+  if (currentNode == nullptr)
     currentNode = std::make_shared<TrieNodeWithValue<T>>(std::make_shared<T>(std::move(value)));
-  }else{
-    currentNode = std::make_shared<TrieNodeWithValue<T>>(currentNode->children_,std::make_shared<T>(std::move(value)));
-  }
-  while(!parents.empty()) {
+  else
+    currentNode = std::make_shared<TrieNodeWithValue<T>>(currentNode->children_, std::make_shared<T>(std::move(value)));
+
+  while (!parents.empty()) {
     auto [key, node] = parents.back();
     parents.pop_back();
     std::shared_ptr<TrieNode> cloned_node;
-    if(node != nullptr)
+    if (node != nullptr)
       cloned_node = node->Clone();
     else
       cloned_node = std::make_shared<TrieNode>(std::map<char, std::shared_ptr<const TrieNode>>{});
@@ -99,10 +98,41 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
  * @return If the key does not exist, return the original trie. Otherwise, returns the new trie.
  */
 auto Trie::Remove(std::string_view key) const -> Trie {
-  throw NotImplementedException("Trie::Remove is not implemented.");
+  // throw NotImplementedException("Trie::Remove is not implemented.");
 
   // You should walk through the trie and remove nodes if necessary. If the node doesn't contain a value anymore,
   // you should convert it to `TrieNode`. If a node doesn't have children anymore, you should remove it.
+  auto currentNode = this->root_;
+  std::vector<std::pair<char, std::shared_ptr<const TrieNode>>> parents;
+  for (char ch : key) {
+    if (currentNode == nullptr) {
+      return *this;
+    }
+    auto findnode = currentNode->children_.find(ch);
+    if (findnode == currentNode->children_.end()) {
+      return *this;
+    }else {
+      parents.push_back(std::make_pair(ch, currentNode));
+      currentNode = findnode->second;
+    }
+  }
+  if (currentNode->is_value_node_)
+    currentNode = std::make_shared<TrieNode>(currentNode->children_);
+  if(currentNode->children_.empty()) currentNode = nullptr;
+  while (!parents.empty()) {
+      auto [key, node] = parents.back();
+      parents.pop_back();
+      auto cloned_node = node->Clone();
+      if(currentNode == nullptr)
+        cloned_node->children_.erase(key);
+      else
+        cloned_node->children_[key] = currentNode;
+      if(cloned_node->children_.empty() && !cloned_node->is_value_node_)
+        currentNode = nullptr;
+      else
+        currentNode = std::move(cloned_node);
+    }
+  return Trie{currentNode};
 }
 
 // Below are explicit instantiation of template functions.
