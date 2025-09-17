@@ -11,6 +11,9 @@
 //===----------------------------------------------------------------------===//
 
 #include "primer/trie_store.h"
+#include <mutex>
+#include <optional>
+#include <utility>
 #include "common/exception.h"
 
 namespace bustub {
@@ -27,7 +30,15 @@ auto TrieStore::Get(std::string_view key) -> std::optional<ValueGuard<T>> {
   // (2) Lookup the value in the trie.
   // (3) If the value is found, return a ValueGuard object that holds a reference to the value and the
   //     root. Otherwise, return std::nullopt.
-  throw NotImplementedException("TrieStore::Get is not implemented.");
+  //throw NotImplementedException("TrieStore::Get is not implemented.");
+  std::unique_lock<std::mutex> lock(root_lock_);
+  auto trie = root_;
+  lock.unlock();
+  auto value = trie.Get<T>(key);
+  if(value == nullptr)
+    return std::nullopt;
+  
+  return std::optional<ValueGuard<T>>(std::in_place, trie, *value);
 }
 
 /**
@@ -38,14 +49,32 @@ template <class T>
 void TrieStore::Put(std::string_view key, T value) {
   // You will need to ensure there is only one writer at a time. Think of how you can achieve this.
   // The logic should be somehow similar to `TrieStore::Get`.
-  throw NotImplementedException("TrieStore::Put is not implemented.");
+  //throw NotImplementedException("TrieStore::Put is not implemented.");
+  std::unique_lock<std::mutex> writelock(write_lock_);
+  std::unique_lock<std::mutex> rootlock(root_lock_);
+  auto trie = root_;
+  rootlock.unlock();
+  auto temproot = trie.Put(key, std::move(value));
+  rootlock.lock();
+  root_ = temproot;
+  rootlock.unlock();
+  writelock.unlock();
 }
 
 /** @brief This function will remove the key-value pair from the trie. */
 void TrieStore::Remove(std::string_view key) {
   // You will need to ensure there is only one writer at a time. Think of how you can achieve this.
   // The logic should be somehow similar to `TrieStore::Get`.
-  throw NotImplementedException("TrieStore::Remove is not implemented.");
+  //throw NotImplementedException("TrieStore::Remove is not implemented.");
+  std::unique_lock<std::mutex> writelock(write_lock_);
+  std::unique_lock<std::mutex> rootlock(root_lock_);
+  auto trie = root_;
+  rootlock.unlock();
+  auto temproot = trie.Remove(key);
+  rootlock.lock();
+  root_ = temproot;
+  rootlock.unlock();
+  writelock.unlock();
 }
 
 // Below are explicit instantiation of template functions.
