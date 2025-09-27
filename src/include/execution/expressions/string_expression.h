@@ -46,7 +46,20 @@ class StringExpression : public AbstractExpression {
   }
 
   auto Compute(const std::string &val) const -> std::string {
-    // TODO(student): implement upper / lower.
+    switch (expr_type_) {
+      case StringExpressionType::Upper: {
+        std::string upper = val;
+        std::transform(upper.begin(), upper.end(), upper.begin(), [](unsigned char c) { return std::toupper(c); });
+        return upper;
+      }
+      case StringExpressionType::Lower: {
+        std::string lower = val;
+        std::transform(lower.begin(), lower.end(), lower.begin(), [](unsigned char c) { return std::tolower(c); });
+        return lower;
+      }
+      default:
+        throw bustub::ExecutionException("Unknown StringExpressionType");
+    }
     return {};
   }
 
