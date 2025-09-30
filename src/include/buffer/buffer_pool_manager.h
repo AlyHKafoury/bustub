@@ -18,7 +18,7 @@
 #include <unordered_map>
 #include <vector>
 
-#include "buffer/arc_replacer.h"
+#include "buffer/lru_k_replacer.h"
 #include "common/config.h"
 #include "recovery/log_manager.h"
 #include "storage/disk/disk_scheduler.h"
@@ -71,6 +71,9 @@ class FrameHeader {
 
   /** @brief The frame ID / index of the frame this header represents. */
   const frame_id_t frame_id_;
+
+  /** @brief The frame ID / index of the frame this header represents. */
+  page_id_t page_id_;
 
   /** @brief The readers / writer latch for this frame. */
   std::shared_mutex rwlatch_;
@@ -133,6 +136,8 @@ class BufferPoolManager {
   /** @brief The next page ID to be allocated.  */
   std::atomic<page_id_t> next_page_id_;
 
+  bool diskDataOperation(page_id_t page_id, AccessType access_type, char * data, bool is_write);
+
   /**
    * @brief The latch protecting the buffer pool's inner data structures.
    *
@@ -150,7 +155,7 @@ class BufferPoolManager {
   std::list<frame_id_t> free_frames_;
 
   /** @brief The replacer to find unpinned / candidate pages for eviction. */
-  std::shared_ptr<ArcReplacer> replacer_;
+  std::shared_ptr<LRUKReplacer> replacer_;
 
   /** @brief A pointer to the disk scheduler. Shared with the page guards for flushing. */
   std::shared_ptr<DiskScheduler> disk_scheduler_;
@@ -171,5 +176,7 @@ class BufferPoolManager {
    * stored inside of it. Additionally, you may also want to implement a helper function that returns either a shared
    * pointer to a `FrameHeader` that already has a page's data stored inside of it, or an index to said `FrameHeader`.
    */
+
+   std::unordered_map<page_id_t, frame_id_t> write_page_table_;
 };
 }  // namespace bustub

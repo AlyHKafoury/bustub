@@ -11,9 +11,17 @@
 //===----------------------------------------------------------------------===//
 
 #include "buffer/buffer_pool_manager.h"
-#include "buffer/arc_replacer.h"
+#include <algorithm>
+#include <cstddef>
+#include <iostream>
+#include <memory>
+#include <optional>
+#include "buffer/lru_k_replacer.h"
 #include "common/config.h"
+#include "common/exception.h"
 #include "common/macros.h"
+#include "storage/disk/disk_manager.h"
+#include "storage/page/page_guard.h"
 
 namespace bustub {
 
@@ -38,7 +46,9 @@ auto FrameHeader::GetData() const -> const char * { return data_.data(); }
  *
  * @return char* A pointer to mutable data that the frame stores.
  */
-auto FrameHeader::GetDataMut() -> char * { return data_.data(); }
+auto FrameHeader::GetDataMut() -> char * {
+  return data_.data();
+}
 
 /**
  * @brief Resets a `FrameHeader`'s member fields.
@@ -72,7 +82,7 @@ BufferPoolManager::BufferPoolManager(size_t num_frames, DiskManager *disk_manage
     : num_frames_(num_frames),
       next_page_id_(0),
       bpm_latch_(std::make_shared<std::mutex>()),
-      replacer_(std::make_shared<ArcReplacer>(num_frames)),
+      replacer_(std::make_shared<LRUKReplacer>(num_frames, 2)),
       disk_scheduler_(std::make_shared<DiskScheduler>(disk_manager)),
       log_manager_(log_manager) {
   // Not strictly necessary...
@@ -117,8 +127,31 @@ auto BufferPoolManager::Size() const -> size_t { return num_frames_; }
  *
  * @return The page ID of the newly allocated page.
  */
-auto BufferPoolManager::NewPage() -> page_id_t { UNIMPLEMENTED("TODO(P1): Add implementation."); }
+auto BufferPoolManager::NewPage() -> page_id_t {
+  return next_page_id_.fetch_add(1);
+}
 
+/**
+ * @brief Wrapper for access on disk disk.
+ *
+ *
+ * @return If access succeeded and returns the data to the buffer or copies data from the buffer.
+ */
+bool BufferPoolManager::diskDataOperation(page_id_t page_id, AccessType access_type, char *data, bool is_write) {
+  std::vector<DiskRequest> requests;
+  auto read_promise = disk_scheduler_->CreatePromise();
+  std::future<bool> read_future = read_promise.get_future();
+  DiskRequest req{
+      .is_write_ = is_write,
+      .data_ = data,
+      .page_id_ = page_id,
+      .callback_ = std::move(read_promise),
+  };
+  requests.push_back(std::move(req));
+  disk_scheduler_->Schedule(requests);
+  read_future.wait();
+  return read_future.get();
+}
 /**
  * @brief Removes a page from the database, both on disk and in memory.
  *
@@ -180,7 +213,54 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool { UNIMPLEMENTED("T
  * returns `std::nullopt`; otherwise, returns a `WritePageGuard` ensuring exclusive and mutable access to a page's data.
  */
 auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_type) -> std::optional<WritePageGuard> {
-  UNIMPLEMENTED("TODO(P1): Add implementation.");
+  std::scoped_lock latch(*bpm_latch_);
+  std::shared_ptr<FrameHeader> frame;
+  frame_id_t free_frame = -1;
+  if (write_page_table_.count(page_id)) {
+    return std::nullopt;
+  }
+  if (page_table_.count(page_id)) {
+    frame_id_t frame_id = page_table_[page_id];
+    auto frame = frames_[frame_id];
+
+    // Pin the frame and record access
+    frame->pin_count_++;
+    replacer_->RecordAccess(frame_id, access_type);
+    replacer_->SetEvictable(frame_id, false);
+
+    return WritePageGuard(page_id, frame, replacer_, bpm_latch_, disk_scheduler_);
+  }
+  if (!free_frames_.empty()) {
+    free_frame = free_frames_.front();
+    free_frames_.pop_front();
+    frame = frames_[free_frame];
+  } else {
+    auto try_evict = replacer_->Evict();
+    if (try_evict.has_value()) {
+      free_frame = try_evict.value();
+      frame = frames_[free_frame];
+      if (frame->is_dirty_) {
+        if (!diskDataOperation(frame->page_id_, AccessType::Unknown, frame->data_.data(), true)) {
+          throw bustub::Exception("Failed to write dirty page to disk");
+        }
+      }
+    } else {
+      return std::nullopt;
+    }
+  }
+  frame->pin_count_.store(1);
+  frame->is_dirty_ = false;
+  frame->page_id_ = page_id;
+  if (diskDataOperation(page_id, access_type, frame->data_.data(), false) == true) {
+    page_table_[page_id] = free_frame;
+    write_page_table_[page_id] = free_frame;
+    replacer_->RecordAccess(free_frame, access_type);
+    replacer_->SetEvictable(free_frame, false);
+    std::cout << "TEST |||||||||| " << frame->data_.size() << std::endl;
+    return WritePageGuard(page_id, std::move(frame), replacer_, bpm_latch_, disk_scheduler_);
+  }
+  free_frames_.push_front(free_frame);
+  throw bustub::Exception("Failed to load page from disk");
 }
 
 /**
@@ -208,7 +288,49 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
  * returns `std::nullopt`; otherwise, returns a `ReadPageGuard` ensuring shared and read-only access to a page's data.
  */
 auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_type) -> std::optional<ReadPageGuard> {
-  UNIMPLEMENTED("TODO(P1): Add implementation.");
+  std::scoped_lock latch(*bpm_latch_);
+  std::shared_ptr<FrameHeader> frame;
+  frame_id_t free_frame = -1;
+  if (page_table_.count(page_id)) {
+    frame_id_t frame_id = page_table_[page_id];
+    auto frame = frames_[frame_id];
+
+    // Pin the frame and record access
+    frame->pin_count_++;
+    replacer_->RecordAccess(frame_id, access_type);
+    replacer_->SetEvictable(frame_id, false);
+
+    return ReadPageGuard(page_id, frame, replacer_, bpm_latch_, disk_scheduler_);
+  }
+  if (!free_frames_.empty()) {
+    free_frame = free_frames_.front();
+    free_frames_.pop_front();
+    frame = frames_[free_frame];
+  } else {
+    auto try_evict = replacer_->Evict();
+    if (try_evict.has_value()) {
+      free_frame = try_evict.value();
+      frame = frames_[free_frame];
+      if (frame->is_dirty_) {
+        if (!diskDataOperation(frame->page_id_, AccessType::Unknown, frame->data_.data(), true)) {
+          throw bustub::Exception("Failed to write dirty page to disk");
+        }
+      }
+    } else {
+      return std::nullopt;
+    }
+  }
+  frame->pin_count_.store(1);
+  frame->is_dirty_ = false;
+  frame->page_id_ = page_id;
+  if (diskDataOperation(page_id, access_type, frame->data_.data(), false) == true) {
+    page_table_[page_id] = free_frame;
+    replacer_->RecordAccess(free_frame, access_type);
+    replacer_->SetEvictable(free_frame, false);
+    return ReadPageGuard(page_id, frame, replacer_, bpm_latch_, disk_scheduler_);
+  }
+  free_frames_.push_front(free_frame);
+  throw bustub::Exception("Failed to load page from disk");
 }
 
 /**
