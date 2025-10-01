@@ -139,7 +139,13 @@ void ReadPageGuard::Flush() {}
  *
  * TODO(P1): Add implementation.
  */
-void ReadPageGuard::Drop() {}
+void ReadPageGuard::Drop() {
+  if(frame_ != nullptr) {
+    if(frame_->pin_count_.fetch_add(-1) == 1) {
+      replacer_->SetEvictable(frame_->frame_id_, true);
+    }
+  }
+}
 
 /** @brief The destructor for `ReadPageGuard`. This destructor simply calls `Drop()`. */
 ReadPageGuard::~ReadPageGuard() { Drop(); }
@@ -251,9 +257,10 @@ auto WritePageGuard::GetData() const -> const char * {
  */
 auto WritePageGuard::GetDataMut() -> char * {
   BUSTUB_ENSURE(is_valid_, "tried to use an invalid write guard");
-  std::cout << "frame_ addr=" << frame_.get()
-            << " data_ addr=" << static_cast<const void *>(frame_ ? frame_->data_.data() : nullptr)
-            << " size=" << (frame_ ? frame_->data_.size() : 0) << "\n";
+  // std::cout << "frame_ addr=" << frame_.get()
+  //           << " data_ addr=" << static_cast<const void *>(frame_ ? frame_->data_.data() : nullptr)
+  //           << " size=" << (frame_ ? frame_->data_.size() : 0) << "\n";
+  frame_->is_dirty_ = true;
   return frame_->GetDataMut();
 }
 
@@ -280,10 +287,16 @@ void WritePageGuard::Flush() {}
  * Make sure you don't double free! Also, think **very** **VERY** carefully about what resources you own and the order
  * in which you release those resources. If you get the ordering wrong, you will very likely fail one of the later
  * Gradescope tests. You may also want to take the buffer pool manager's latch in a very specific scenario...
- *
+ *frame_->pin_count_.fetch_add(-1);
  * TODO(P1): Add implementation.
  */
-void WritePageGuard::Drop() {}
+void WritePageGuard::Drop() {
+  if(frame_ != nullptr) {
+    if(frame_->pin_count_.fetch_add(-1) == 1) {
+      replacer_->SetEvictable(frame_->frame_id_, true);
+    }
+  }
+}
 
 /** @brief The destructor for `WritePageGuard`. This destructor simply calls `Drop()`. */
 WritePageGuard::~WritePageGuard() { Drop(); }

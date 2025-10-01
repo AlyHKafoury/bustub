@@ -13,6 +13,7 @@
 #include "buffer/buffer_pool_manager.h"
 #include <algorithm>
 #include <cstddef>
+#include <cstdio>
 #include <iostream>
 #include <memory>
 #include <optional>
@@ -46,9 +47,7 @@ auto FrameHeader::GetData() const -> const char * { return data_.data(); }
  *
  * @return char* A pointer to mutable data that the frame stores.
  */
-auto FrameHeader::GetDataMut() -> char * {
-  return data_.data();
-}
+auto FrameHeader::GetDataMut() -> char * { return data_.data(); }
 
 /**
  * @brief Resets a `FrameHeader`'s member fields.
@@ -127,9 +126,7 @@ auto BufferPoolManager::Size() const -> size_t { return num_frames_; }
  *
  * @return The page ID of the newly allocated page.
  */
-auto BufferPoolManager::NewPage() -> page_id_t {
-  return next_page_id_.fetch_add(1);
-}
+auto BufferPoolManager::NewPage() -> page_id_t { return next_page_id_.fetch_add(1); }
 
 /**
  * @brief Wrapper for access on disk disk.
@@ -171,7 +168,17 @@ bool BufferPoolManager::diskDataOperation(page_id_t page_id, AccessType access_t
  * @param page_id The page ID of the page we want to delete.
  * @return `false` if the page exists but could not be deleted, `true` if the page didn't exist or deletion succeeded.
  */
-auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool { UNIMPLEMENTED("TODO(P1): Add implementation."); }
+auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
+  std::scoped_lock latch(*bpm_latch_);
+  if (page_table_.count(page_id)) {
+    auto frame_id = page_table_.find(page_id)->second;
+    frames_[frame_id]->is_dirty_ = false;
+    free_frames_.push_back(frame_id);
+    disk_scheduler_->DeallocatePage(page_id);
+    return true;
+  }
+  return false;
+}
 
 /**
  * @brief Acquires an optional write-locked guard over a page of data. The user can specify an `AccessType` if needed.
@@ -217,6 +224,8 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
   std::shared_ptr<FrameHeader> frame;
   frame_id_t free_frame = -1;
   if (write_page_table_.count(page_id)) {
+    // printf("we had to exit in here \n");
+    // printf("Table normal : %zu \n", write_page_table_.count(page_id));
     return std::nullopt;
   }
   if (page_table_.count(page_id)) {
@@ -240,10 +249,14 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
       free_frame = try_evict.value();
       frame = frames_[free_frame];
       if (frame->is_dirty_) {
+        //std::cout << "TEST |||||||||| " << frame->data_.data() << std::endl;
         if (!diskDataOperation(frame->page_id_, AccessType::Unknown, frame->data_.data(), true)) {
           throw bustub::Exception("Failed to write dirty page to disk");
         }
       }
+      // printf("Erased Table normal : %i \n", page_id);
+      page_table_.erase(frame->page_id_);
+      write_page_table_.erase(frame->page_id_);
     } else {
       return std::nullopt;
     }
@@ -256,7 +269,6 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
     write_page_table_[page_id] = free_frame;
     replacer_->RecordAccess(free_frame, access_type);
     replacer_->SetEvictable(free_frame, false);
-    std::cout << "TEST |||||||||| " << frame->data_.size() << std::endl;
     return WritePageGuard(page_id, std::move(frame), replacer_, bpm_latch_, disk_scheduler_);
   }
   free_frames_.push_front(free_frame);
@@ -316,6 +328,8 @@ auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_typ
           throw bustub::Exception("Failed to write dirty page to disk");
         }
       }
+      page_table_.erase(frame->page_id_);
+      write_page_table_.erase(frame->page_id_);
     } else {
       return std::nullopt;
     }
@@ -478,7 +492,12 @@ void BufferPoolManager::FlushAllPages() { UNIMPLEMENTED("TODO(P1): Add implement
  * @return std::optional<size_t> The pin count if the page exists; otherwise, `std::nullopt`.
  */
 auto BufferPoolManager::GetPinCount(page_id_t page_id) -> std::optional<size_t> {
-  UNIMPLEMENTED("TODO(P1): Add implementation.");
+  if (page_table_.count(page_id)) {
+    auto frame_id = page_table_.find(page_id)->second;
+    // std::cout << "Pin Count: " << frames_[frame_id]->pin_count_.load() << " page id :" << page_id << " A7eeeeeeeeeh " << std::endl;
+    return frames_[frame_id]->pin_count_.load();
+  }
+  return std::nullopt;
 }
 
 }  // namespace bustub
