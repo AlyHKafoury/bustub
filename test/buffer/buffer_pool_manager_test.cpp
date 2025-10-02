@@ -249,9 +249,11 @@ TEST(BufferPoolManagerTest, PageAccessTest) {
   auto thread = std::thread([&]() {
     // The writer can keep writing to the same page.
     for (size_t i = 0; i < rounds; i++) {
+            std::cout << "REACHED Write HERE for ID ! " << i << std::endl;
       std::this_thread::sleep_for(std::chrono::milliseconds(5));
       auto guard = bpm->WritePage(pid);
       CopyString(guard.GetDataMut(), std::to_string(i));
+      std::cout << "Dropping HERE for : " << i << std::endl;
     }
   });
 
@@ -264,7 +266,7 @@ TEST(BufferPoolManagerTest, PageAccessTest) {
 
     // Save the data we observe.
     memcpy(buf, guard.GetData(), BUSTUB_PAGE_SIZE);
-
+std::cout << "REACHED Read HERE for ID ! " << i << std::endl;
     // Sleep for a bit. If latching is working properly, nothing should be writing to the page.
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
 

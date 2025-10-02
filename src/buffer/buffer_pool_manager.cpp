@@ -225,8 +225,16 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
   frame_id_t free_frame = -1;
   if (write_page_table_.count(page_id)) {
     // printf("we had to exit in here \n");
-    // printf("Table normal : %zu \n", write_page_table_.count(page_id));
-    return std::nullopt;
+    if (page_table_.count(page_id)) {
+      auto frame_id = page_table_.find(page_id)->second;
+      if (frames_[frame_id]->write_owned.load()) {
+        printf("Table normal : %zu \n", page_table_.count(page_id));
+        printf("Table normal : %lu \n", frames_[frame_id]->pin_count_.load());
+        return std::nullopt;
+      }
+    } else {
+      throw bustub::Exception("Page is write locked but not in page table");
+    }
   }
   if (page_table_.count(page_id)) {
     frame_id_t frame_id = page_table_[page_id];
@@ -236,7 +244,7 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
     frame->pin_count_++;
     replacer_->RecordAccess(frame_id, access_type);
     replacer_->SetEvictable(frame_id, false);
-
+    printf("Give old frame \n");
     return WritePageGuard(page_id, frame, replacer_, bpm_latch_, disk_scheduler_);
   }
   if (!free_frames_.empty()) {
@@ -249,7 +257,7 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
       free_frame = try_evict.value();
       frame = frames_[free_frame];
       if (frame->is_dirty_) {
-        //std::cout << "TEST |||||||||| " << frame->data_.data() << std::endl;
+        // std::cout << "TEST |||||||||| " << frame->data_.data() << std::endl;
         if (!diskDataOperation(frame->page_id_, AccessType::Unknown, frame->data_.data(), true)) {
           throw bustub::Exception("Failed to write dirty page to disk");
         }
@@ -494,7 +502,8 @@ void BufferPoolManager::FlushAllPages() { UNIMPLEMENTED("TODO(P1): Add implement
 auto BufferPoolManager::GetPinCount(page_id_t page_id) -> std::optional<size_t> {
   if (page_table_.count(page_id)) {
     auto frame_id = page_table_.find(page_id)->second;
-    // std::cout << "Pin Count: " << frames_[frame_id]->pin_count_.load() << " page id :" << page_id << " A7eeeeeeeeeh " << std::endl;
+    // std::cout << "Pin Count: " << frames_[frame_id]->pin_count_.load() << " page id :" << page_id << " A7eeeeeeeeeh "
+    // << std::endl;
     return frames_[frame_id]->pin_count_.load();
   }
   return std::nullopt;

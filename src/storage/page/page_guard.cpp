@@ -11,9 +11,11 @@
 //===----------------------------------------------------------------------===//
 
 #include "storage/page/page_guard.h"
+#include <iostream>
 #include <memory>
 #include <ostream>
 #include "buffer/lru_k_replacer.h"
+#include "common/config.h"
 #include "common/macros.h"
 
 namespace bustub {
@@ -141,7 +143,7 @@ void ReadPageGuard::Flush() {}
  */
 void ReadPageGuard::Drop() {
   if(frame_ != nullptr) {
-    if(frame_->pin_count_.fetch_add(-1) == 1) {
+    if(frame_->pin_count_.fetch_sub(1) == 1) {
       replacer_->SetEvictable(frame_->frame_id_, true);
     }
   }
@@ -176,6 +178,7 @@ WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> f
       bpm_latch_(std::move(bpm_latch)),
       disk_scheduler_(std::move(disk_scheduler)) {
   is_valid_ = true;
+  frame_->write_owned.store(true);
 }
 
 /**
@@ -223,6 +226,7 @@ WritePageGuard::WritePageGuard(WritePageGuard &&that) noexcept
  */
 auto WritePageGuard::operator=(WritePageGuard &&that) noexcept -> WritePageGuard & {
   if (this != &that) {
+    Drop();
     page_id_ = that.page_id_;
     frame_ = std::move(that.frame_);
     replacer_ = std::move(that.replacer_);
@@ -292,9 +296,13 @@ void WritePageGuard::Flush() {}
  */
 void WritePageGuard::Drop() {
   if(frame_ != nullptr) {
-    if(frame_->pin_count_.fetch_add(-1) == 1) {
+    std::cout << "Try Dropping page :" << page_id_ << std::endl;
+    frame_->write_owned.store(false);
+    if(frame_->pin_count_.fetch_sub(1) == 1) {
       replacer_->SetEvictable(frame_->frame_id_, true);
-    }
+      frame_ = nullptr;
+           std::cout << "Dropping page :" << page_id_ << std::endl; 
+    }   
   }
 }
 

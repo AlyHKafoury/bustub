@@ -98,6 +98,7 @@ class FrameHeader {
    * currently storing. This might allow you to skip searching for the corresponding (page ID, frame ID) pair somewhere
    * else in the buffer pool manager...
    */
+   std::atomic<bool> write_owned{false};
 };
 
 /**
