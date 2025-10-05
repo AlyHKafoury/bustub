@@ -54,7 +54,7 @@ void PrintNodeStore(const std::unordered_map<frame_id_t, LRUKNode> &node_store) 
  * @return the frame ID if a frame is successfully evicted, or `std::nullopt` if no frames can be evicted.
  */
 auto LRUKReplacer::Evict() -> std::optional<frame_id_t> {
-  //PrintNodeStore(node_store_);
+  // PrintNodeStore(node_store_);
   size_t oldest_time = std::numeric_limits<unsigned long>::max();
   size_t biggest_k = 0;
   frame_id_t oldest_time_id = -1;
@@ -65,17 +65,14 @@ auto LRUKReplacer::Evict() -> std::optional<frame_id_t> {
       if (last_time_entry < oldest_time && node.is_evictable_) {
         oldest_time = last_time_entry;
         oldest_time_id = frame_id;
-        // std::cout << "Oldest Node: " << frame_id << std::endl;
       }
       continue;
     }
     auto time_entry_at_k = *std::prev(node.history_.end(), k_);
-    // std::cout << "Checking Node: " << frame_id << " time stamp at k" << time_entry_at_k << " Biggest K:" << biggest_k << std::endl;
     auto time_entry_at_latest = NowNanos();
     if (time_entry_at_latest - time_entry_at_k > biggest_k && node.is_evictable_) {
       biggest_k = time_entry_at_latest - time_entry_at_k;
       biggest_k_id = frame_id;
-    //   std::cout << "Biggest K: " << frame_id << std::endl;
     }
   }
   if (oldest_time_id != -1) {

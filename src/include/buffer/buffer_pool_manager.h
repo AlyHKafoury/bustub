@@ -98,7 +98,7 @@ class FrameHeader {
    * currently storing. This might allow you to skip searching for the corresponding (page ID, frame ID) pair somewhere
    * else in the buffer pool manager...
    */
-   std::atomic<bool> write_owned{false};
+  //  std::atomic<bool> write_owned{false};
 };
 
 /**
@@ -178,6 +178,6 @@ class BufferPoolManager {
    * pointer to a `FrameHeader` that already has a page's data stored inside of it, or an index to said `FrameHeader`.
    */
 
-   std::unordered_map<page_id_t, frame_id_t> write_page_table_;
+  //  std::unordered_map<page_id_t, frame_id_t> write_page_table_;
 };
 }  // namespace bustub

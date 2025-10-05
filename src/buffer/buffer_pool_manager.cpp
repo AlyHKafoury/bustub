@@ -21,6 +21,7 @@
 #include "common/config.h"
 #include "common/exception.h"
 #include "common/macros.h"
+#include "fmt/base.h"
 #include "storage/disk/disk_manager.h"
 #include "storage/page/page_guard.h"
 
@@ -220,31 +221,19 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
  * returns `std::nullopt`; otherwise, returns a `WritePageGuard` ensuring exclusive and mutable access to a page's data.
  */
 auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_type) -> std::optional<WritePageGuard> {
-  std::scoped_lock latch(*bpm_latch_);
+  bpm_latch_->lock();
   std::shared_ptr<FrameHeader> frame;
   frame_id_t free_frame = -1;
-  if (write_page_table_.count(page_id)) {
-    // printf("we had to exit in here \n");
-    if (page_table_.count(page_id)) {
-      auto frame_id = page_table_.find(page_id)->second;
-      if (frames_[frame_id]->write_owned.load()) {
-        printf("Table normal : %zu \n", page_table_.count(page_id));
-        printf("Table normal : %lu \n", frames_[frame_id]->pin_count_.load());
-        return std::nullopt;
-      }
-    } else {
-      throw bustub::Exception("Page is write locked but not in page table");
-    }
-  }
   if (page_table_.count(page_id)) {
     frame_id_t frame_id = page_table_[page_id];
     auto frame = frames_[frame_id];
 
     // Pin the frame and record access
-    frame->pin_count_++;
+    frame->pin_count_.fetch_add(1);
     replacer_->RecordAccess(frame_id, access_type);
     replacer_->SetEvictable(frame_id, false);
-    printf("Give old frame \n");
+    // printf("Give old frame \n");
+    bpm_latch_->unlock();
     return WritePageGuard(page_id, frame, replacer_, bpm_latch_, disk_scheduler_);
   }
   if (!free_frames_.empty()) {
@@ -257,26 +246,28 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
       free_frame = try_evict.value();
       frame = frames_[free_frame];
       if (frame->is_dirty_) {
-        // std::cout << "TEST |||||||||| " << frame->data_.data() << std::endl;
+
         if (!diskDataOperation(frame->page_id_, AccessType::Unknown, frame->data_.data(), true)) {
           throw bustub::Exception("Failed to write dirty page to disk");
         }
       }
-      // printf("Erased Table normal : %i \n", page_id);
+
       page_table_.erase(frame->page_id_);
-      write_page_table_.erase(frame->page_id_);
     } else {
+      bpm_latch_->unlock();
       return std::nullopt;
     }
   }
   frame->pin_count_.store(1);
   frame->is_dirty_ = false;
   frame->page_id_ = page_id;
+  page_table_[page_id] = free_frame;
+  bpm_latch_->unlock();
   if (diskDataOperation(page_id, access_type, frame->data_.data(), false) == true) {
-    page_table_[page_id] = free_frame;
-    write_page_table_[page_id] = free_frame;
+    bpm_latch_->lock();
     replacer_->RecordAccess(free_frame, access_type);
     replacer_->SetEvictable(free_frame, false);
+    bpm_latch_->unlock();
     return WritePageGuard(page_id, std::move(frame), replacer_, bpm_latch_, disk_scheduler_);
   }
   free_frames_.push_front(free_frame);
@@ -308,7 +299,7 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
  * returns `std::nullopt`; otherwise, returns a `ReadPageGuard` ensuring shared and read-only access to a page's data.
  */
 auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_type) -> std::optional<ReadPageGuard> {
-  std::scoped_lock latch(*bpm_latch_);
+  bpm_latch_->lock();
   std::shared_ptr<FrameHeader> frame;
   frame_id_t free_frame = -1;
   if (page_table_.count(page_id)) {
@@ -316,9 +307,10 @@ auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_typ
     auto frame = frames_[frame_id];
 
     // Pin the frame and record access
-    frame->pin_count_++;
+    frame->pin_count_.fetch_add(1);
     replacer_->RecordAccess(frame_id, access_type);
     replacer_->SetEvictable(frame_id, false);
+    bpm_latch_->unlock();
 
     return ReadPageGuard(page_id, frame, replacer_, bpm_latch_, disk_scheduler_);
   }
@@ -337,18 +329,21 @@ auto BufferPoolManager::CheckedReadPage(page_id_t page_id, AccessType access_typ
         }
       }
       page_table_.erase(frame->page_id_);
-      write_page_table_.erase(frame->page_id_);
     } else {
+      bpm_latch_->unlock();
       return std::nullopt;
     }
   }
   frame->pin_count_.store(1);
   frame->is_dirty_ = false;
   frame->page_id_ = page_id;
+  page_table_[page_id] = free_frame;
+  bpm_latch_->unlock();
   if (diskDataOperation(page_id, access_type, frame->data_.data(), false) == true) {
-    page_table_[page_id] = free_frame;
+    bpm_latch_->lock();
     replacer_->RecordAccess(free_frame, access_type);
     replacer_->SetEvictable(free_frame, false);
+    bpm_latch_->unlock();
     return ReadPageGuard(page_id, frame, replacer_, bpm_latch_, disk_scheduler_);
   }
   free_frames_.push_front(free_frame);
