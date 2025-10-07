@@ -246,7 +246,6 @@ auto BufferPoolManager::CheckedWritePage(page_id_t page_id, AccessType access_ty
       free_frame = try_evict.value();
       frame = frames_[free_frame];
       if (frame->is_dirty_) {
-
         if (!diskDataOperation(frame->page_id_, AccessType::Unknown, frame->data_.data(), true)) {
           throw bustub::Exception("Failed to write dirty page to disk");
         }

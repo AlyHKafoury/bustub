@@ -106,7 +106,8 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType
     node.history_.push_back(now);
   } else {
     node_store_.try_emplace(frame_id, LRUKNode(k_, frame_id));
-    // std::cout << "Node not found for frame_id: " << frame_id << " record access for now: " << NowNanos() << std::endl;
+    // std::cout << "Node not found for frame_id: " << frame_id << " record access for now: " << NowNanos() <<
+    // std::endl;
   }
 }
 
@@ -131,7 +132,7 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
   auto it = node_store_.find(frame_id);
   if (it != node_store_.end()) {
     LRUKNode &node = it->second;
-    //std::cout << node.fid_ << " set evictable" << std::endl;
+    // std::cout << node.fid_ << " set evictable" << std::endl;
     node.is_evictable_ = set_evictable;
   }
 }
@@ -158,7 +159,7 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
   if (it != node_store_.end()) {
     LRUKNode &node = it->second;
     if (node.is_evictable_ == true) {
-    //   std::cout << "removing frame : " << frame_id << std::endl;
+      //   std::cout << "removing frame : " << frame_id << std::endl;
       node_store_.erase(frame_id);
     } else {
       throw bustub::Exception("Node is not evictable");

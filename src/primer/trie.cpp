@@ -111,27 +111,26 @@ auto Trie::Remove(std::string_view key) const -> Trie {
     auto findnode = currentNode->children_.find(ch);
     if (findnode == currentNode->children_.end()) {
       return *this;
-    }else {
+    } else {
       parents.push_back(std::make_pair(ch, currentNode));
       currentNode = findnode->second;
     }
   }
-  if (currentNode->is_value_node_)
-    currentNode = std::make_shared<TrieNode>(currentNode->children_);
-  if(currentNode->children_.empty()) currentNode = nullptr;
+  if (currentNode->is_value_node_) currentNode = std::make_shared<TrieNode>(currentNode->children_);
+  if (currentNode->children_.empty()) currentNode = nullptr;
   while (!parents.empty()) {
-      auto [key, node] = parents.back();
-      parents.pop_back();
-      auto cloned_node = node->Clone();
-      if(currentNode == nullptr)
-        cloned_node->children_.erase(key);
-      else
-        cloned_node->children_[key] = currentNode;
-      if(cloned_node->children_.empty() && !cloned_node->is_value_node_)
-        currentNode = nullptr;
-      else
-        currentNode = std::move(cloned_node);
-    }
+    auto [key, node] = parents.back();
+    parents.pop_back();
+    auto cloned_node = node->Clone();
+    if (currentNode == nullptr)
+      cloned_node->children_.erase(key);
+    else
+      cloned_node->children_[key] = currentNode;
+    if (cloned_node->children_.empty() && !cloned_node->is_value_node_)
+      currentNode = nullptr;
+    else
+      currentNode = std::move(cloned_node);
+  }
   return Trie{currentNode};
 }
 

@@ -46,7 +46,7 @@ ReadPageGuard::ReadPageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> fra
       disk_scheduler_(std::move(disk_scheduler)),
       read_lock_(frame_->rwlatch_) {
   is_valid_ = true;
-  //read_lock_ = std::shared_lock<std::shared_mutex>(frame_->rwlatch_);
+  // read_lock_ = std::shared_lock<std::shared_mutex>(frame_->rwlatch_);
 }
 
 /**
@@ -193,7 +193,7 @@ WritePageGuard::WritePageGuard(page_id_t page_id, std::shared_ptr<FrameHeader> f
       write_lock_(frame_->rwlatch_) {
   is_valid_ = true;
   // frame_->write_owned.store(true);
-  //write_lock_ = std::unique_lock<std::shared_mutex>(frame_->rwlatch_);
+  // write_lock_ = std::unique_lock<std::shared_mutex>(frame_->rwlatch_);
 }
 
 /**

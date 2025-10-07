@@ -137,7 +137,7 @@ class BufferPoolManager {
   /** @brief The next page ID to be allocated.  */
   std::atomic<page_id_t> next_page_id_;
 
-  bool diskDataOperation(page_id_t page_id, AccessType access_type, char * data, bool is_write);
+  bool diskDataOperation(page_id_t page_id, AccessType access_type, char *data, bool is_write);
 
   /**
    * @brief The latch protecting the buffer pool's inner data structures.

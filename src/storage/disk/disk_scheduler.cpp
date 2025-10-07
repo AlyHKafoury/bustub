@@ -19,8 +19,8 @@
 namespace bustub {
 
 DiskScheduler::DiskScheduler(DiskManager *disk_manager) : disk_manager_(disk_manager) {
-  //UNIMPLEMENTED("TODO(P1): Add implementation.");
-  // Spawn the background thread
+  // UNIMPLEMENTED("TODO(P1): Add implementation.");
+  //  Spawn the background thread
   background_thread_.emplace([&] { StartWorkerThread(); });
 }
 
@@ -65,11 +65,11 @@ void DiskScheduler::StartWorkerThread() {
     DiskRequest &req = *opt;
 
     // Handle the request
-    //std::cout << "Got request for page " << req.is_write_ << std::endl;
-    if(req.is_write_){
+    // std::cout << "Got request for page " << req.is_write_ << std::endl;
+    if (req.is_write_) {
       disk_manager_->WritePage(req.page_id_, req.data_);
-      
-    }else {
+
+    } else {
       disk_manager_->ReadPage(req.page_id_, req.data_);
     }
     req.callback_.set_value(true);

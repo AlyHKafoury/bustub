@@ -26,17 +26,15 @@
 namespace bustub {
 
 static inline size_t NowNanos() {
-  return std::chrono::duration_cast<std::chrono::nanoseconds>(
-           std::chrono::steady_clock::now().time_since_epoch()
-         ).count();
+  return std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now().time_since_epoch())
+      .count();
 }
 
 class LRUKNode {
  public:
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
   // Remove maybe_unused if you start using them. Feel free to change the member variables as you want.
-  LRUKNode(size_t k, frame_id_t fid, bool evictable = false)
-      : k_(k), fid_(fid), is_evictable_(evictable) {
+  LRUKNode(size_t k, frame_id_t fid, bool evictable = false) : k_(k), fid_(fid), is_evictable_(evictable) {
     history_.push_back(NowNanos());
   }
   [[maybe_unused]] std::list<size_t> history_;
